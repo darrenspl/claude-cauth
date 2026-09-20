@@ -1,0 +1,64 @@
+# Credential shaped files, first and deliberately.
+#
+# The real profile store lives in ~/.config/claude-oauth and is never inside this repo.
+# These patterns exist so a copy pulled in for debugging, or a stray export bundle, cannot
+# be committed by accident. This is the one section worth reading before editing.
+.credentials.json
+*.credentials.json
+*.oauth.json
+accounts.json
+*.cauth.json
+*.bak
+*.bak-*
+secrets/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Virtualenvs. install.sh builds one outside the repo on purpose, but contributors
+# commonly make a local one and it must never be committed.
+.venv/
+venv/
+env/
+ENV/
+
+# Editors and tooling
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.direnv/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# Deliberately NOT ignored, do not add them:
+#   .planning/   the build handoff, PRD source and release audit are tracked on purpose
+#   .ai-chats/   the session transcripts are part of what this repo publishes
+
+# Local account token stores
+tokens.json

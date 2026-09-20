@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor is what the README promises. The ceiling is what most people run.
+        python-version: ["3.9", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: Check the TUI imports on this Python
+        # Must come BEFORE the uninstall step below. This remains a small, explicit smoke
+        # check even though the terminal-handoff regression tests now import the TUI.
+        run: python -c "import tui; print('tui imports clean')"
+
+      - name: Check the engine imports with no Textual present
+        # cauth.py must stay usable as a CLI on a machine that never installed the TUI
+        # dependency, so this proves the import graph has not quietly grown a hard edge.
+        run: |
+          python -m pip uninstall -y textual
+          python -c "import cauth; print('engine imports clean')"
+          python cauth.py status

@@ -1,0 +1,2 @@
+# Batch files are parsed by cmd.exe, which mis-handles lone LF around labels and goto.
+*.cmd text eol=crlf

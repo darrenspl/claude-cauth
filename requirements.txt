@@ -1,0 +1,4 @@
+# Textual is the only runtime dependency. The stack is locked by docs/tech-stack.md.
+# BUILD-HANDOFF.md named textual>=0.52.0, a 2024-era floor. What actually installs today
+# is the 8.x line, whose API differs enough that tui.py is written against it directly.
+textual>=8.0,<9
