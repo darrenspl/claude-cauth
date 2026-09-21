@@ -1,5 +1,7 @@
 """Default terminal UI for long-lived OAuth tokens, with legacy-profile migration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 import threading
 

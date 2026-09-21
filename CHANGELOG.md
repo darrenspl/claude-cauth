@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Restore Python 3.9 compatibility when importing the default token terminal UI.
+
 - Hidden setup-token input accepts quoted tokens and the supported export assignment.
   Bracketed paste also accepts standard labelled command output and finishes with one
   Enter. Ambiguous input and unknown surrounding text remain rejected without exposing

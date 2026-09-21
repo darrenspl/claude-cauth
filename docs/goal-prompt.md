@@ -1,55 +1,51 @@
-# Restart prompt: public source
+# Restart prompt: compatibility closeout
+
+Recorded 2026-09-21. Resolve the checkout's absolute path with
+`git rev-parse --show-toplevel`; this public document intentionally contains no host-local
+path. Branch at preparation: `main`. Checked base commit:
+`dd49714be50b4b7095210b3aaad28cde6d08fff8`. The closeout commit is the subsequent commit
+containing this prompt and the Python 3.9 compatibility fix; verify current history instead
+of assuming HEAD still points to it. Private host orientation is stored only under the
+local Git directory when available.
 
 Read `README.md`, `CLAUDE.md`, `docs/handoff.md`, and
-`docs/adr/0008-long-lived-oauth-tokens.md` in this checkout first.
+`docs/adr/0008-long-lived-oauth-tokens.md`, in that order. Inspect status and diffs first;
+preserve any concurrent work. This prompt grants no new execution authority.
 
-This checkout contains Cauth source prepared for future public sharing after fixing
-hidden setup-token paste handling. Keep documentation portable and impersonal. Keep
-private infrastructure, personal account details, transcript archives, and unrelated
-internal process notes out of the repository. Preserve useful product behavior, security
-limits, and architectural decisions. Private material was preserved externally before removal;
-do not put archive locations or identifying metadata back into tracked files.
+## Completed objective
 
-Inspect current status and diffs before continuing. Preserve concurrent work. Coordinate
-source, installer, test, and documentation changes; do not claim completion from stale
-verification. Run `python -m pytest tests/ -q` using an isolated environment containing
-`requirements.txt` and pytest. Inspect retained document links and audit the final tracked
-tree for personal identifiers, private endpoints, secrets, and credential artifacts.
+Restore the documented Python 3.9 support without raising the minimum Python version.
+`tokenui.py` postpones annotation evaluation. The pre-mount resume fixture runs inside
+an async runner. The complete fixture suite passed 287 tests on each of Python 3.9,
+3.12, and 3.13. TUI and independent CLI import smoke checks passed. Do not redo these
+changes or treat fixture tests as live-account or native Windows/macOS acceptance.
 
-The paste fix previously passed 284 full-suite tests, 53 targeted tests, 10 independent
-adversarial checks, and the installed-launcher help check. After sanitation the full suite
-passed 287 tests in 99.21 seconds, with exit status 0.
-The separate clean public snapshot has 53 tracked files and passed the privacy helper
-and Gitleaks directory scans with zero findings. Its neutral single-root-commit history
-passed the all-reachable-history privacy helper and Gitleaks history scan, both with
-exit status 0. Final documentation readback checked portability and scope boundaries.
-Repeat the history scans and source-tree comparison after any candidate update.
-Do not claim live account health or native Windows/macOS acceptance from fixtures.
-The installed launcher runs the source checkout; restarting loads changes.
+## Orientation checks
 
-The official setup-token command must retain terminal ownership. Cauth accepts manual
-hidden input afterward; no output scraping or automatic token capture. Real credentials
-and account data stay in private user storage outside the repository. Never request or
-print a real token. Do not operate live accounts to test sanitation.
+1. Confirm the current branch and inspect the compatibility commit and any later work.
+2. Compare its `main` ref with every configured remote and inspect the CI run for that
+   exact commit. Do not infer current green CI from older successful runs.
+3. If further changes are requested, run `python -m pytest tests/ -q` in isolated
+   environments containing `requirements.txt` and pytest for Python 3.9, 3.12, and 3.13.
+   Verify TUI import, plus CLI import without Textual in a separate environment.
+4. Inspect changed documentation links and scan the tracked tree and reachable history
+   for secrets or private identifying material before any authorized public push.
 
-The public-source branch contract is one clean root commit with neutral identity. The
-selected cleanup includes the `tokens.json` ignore rule and replacement of local and
-configured private main histories with that clean root; original history stays in private
-external recovery copies. Inspect current local and remote refs rather than assuming
-that final synchronization succeeded. Verify the ignore rule with a representative
-`tokens.json` path and check that no credential file is tracked. Review all reachable
-blobs, commit messages, identities, tags, and refs before distribution. Tree sanitation
-alone does not sanitize history. GitHub publication has not been performed.
+No further product objective is authorized here. If synchronization and CI are green,
+report the completed state and wait for a new task. If checks fail, report the specific
+failure and preserve current work; this prompt alone does not authorize a new fix or push.
 
-For local recovery and snapshot locations, read the repository-local Git configuration
-keys `cauth.publicPrepBackup` and `cauth.publicPrepCandidate`. Those paths belong only
-in local configuration, never in tracked documentation. If the keys are absent in a
-different checkout, do not invent paths or assume the private archives are available.
+## Boundaries
 
-This prompt grants no new permission to publish, rewrite history, force-push,
-change authentication, delete account state, or
-edit protected configuration. Stop on conflicts or an unmet approval boundary. Do not
-assume any public GitHub owner/repository or configure a public remote without direction.
+Keep public documentation portable and impersonal. Credentials, diagnostics, transcript
+archives, and private recovery paths stay outside tracked files. Preserve neutral commit
+identity and the sanitized public root; ordinary subsequent commits are expected.
+Never rewrite history, force-push, create a new publication destination, change protected
+configuration, deploy, or alter account state without explicit authorization. Stop on
+conflicts, unexpected divergence, secret exposure, or uncertain ownership of dirty files.
 
-Refresh the handoff with actual verification when substantive work resumes. Do not create
-a new autonomous goal or expand into unrelated product work.
+The official setup-token command retains terminal ownership; accept only a manual hidden
+paste afterward. Do not scrape token output or operate real accounts for verification.
+Recovery keys `cauth.publicPrepBackup` and `cauth.publicPrepCandidate`, if present in local
+Git configuration, are host-local references and must remain untracked. Do not create a
+new autonomous goal or reintroduce removed private session archives.

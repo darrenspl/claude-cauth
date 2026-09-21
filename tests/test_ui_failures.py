@@ -13,9 +13,11 @@ import tui
 
 
 def test_resume_before_mount_is_safe():
-    screen = tokenui.TokenHome()
-    screen.on_screen_resume()
-    assert not screen._refresh_scheduled
+    async def drive():
+        screen = tokenui.TokenHome()
+        screen.on_screen_resume()
+        assert not screen._refresh_scheduled
+    asyncio.run(drive())
 
 
 def test_resume_while_list_detached_is_safe():
