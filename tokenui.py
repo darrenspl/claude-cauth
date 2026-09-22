@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import threading
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -148,7 +152,7 @@ class TokenHome(Screen):
         try:
             notice = tokenauth.select(event.item.alias)
             self.refresh_accounts()
-            self.message(f"Selected {event.item.alias}. Press v to verify. {notice}")
+            self.message(f"Selected {event.item.alias}. Press v to verify.\n{notice}")
         except (cauth.CauthError, OSError) as exc:
             self.message(str(exc))
 
@@ -237,6 +241,10 @@ class TokenHome(Screen):
             "a creates a long-lived token; i imports one; l replaces the highlighted token.\n"
             "v checks the selected token; e renames; r forgets; d opens cleanup; g shows logs.\n\n"
             "Use plain claude with the selected token:\n"
+            "Every create/import/renew/select checks Bash/Zsh startup integration.\n"
+            "An existing terminal must load it once; Cauth cannot refresh its parent shell.\n"
+            "Quit Cauth to see the exact activation command, or open a new terminal session.\n"
+            "After activation, token switches need only a new Claude launch.\n"
             "Bash: cauth install-shell bash, then open a new terminal\n"
             "Zsh: cauth install-shell zsh, then open a new terminal\n"
             "PowerShell: cauth shell-init powershell | Out-String | Invoke-Expression\n"
@@ -309,7 +317,7 @@ def run_tui():
         if getattr(app, "return_code", 0):
             return 1
         if request is None:
-            print(tokenauth.launch_instructions())
+            show_exit_instructions()
             return 0
         try:
             if request.action in ("create", "import"):
@@ -327,3 +335,19 @@ def run_tui():
             input("Press Enter to return to Cauth. ")
         except (KeyboardInterrupt, EOFError):
             pass
+
+
+def show_exit_instructions():
+    """Print after Textual restores the terminal, so the next step stays visible."""
+    console = Console()
+    console.print()
+    console.print(Panel(
+        Text("If this terminal still asks you to log in, activate the saved-token "
+             "integration once. Cauth cannot refresh the terminal that launched it."),
+        title="[bold]REFRESH THIS TERMINAL ONCE[/bold]",
+        border_style="bright_yellow", padding=(1, 2),
+    ))
+    # Keep the command outside the box: no border characters when copying it.
+    for line in tokenauth.launch_instructions().splitlines():
+        console.print(Text(line, style="bold bright_cyan" if line.startswith("  ") else ""))
+    console.print()

@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Make normal `claude`/`cc` launches the primary post-setup guidance. Every successful
+  token save/renew/select explains how to activate an existing terminal once, and that
+  later token switches only require a new Claude launch. Document the stale-terminal
+  login prompt and retain copyable instructions after quitting the UI.
+
 - Restore Python 3.9 compatibility when importing the default token terminal UI.
 
 - Hidden setup-token input accepts quoted tokens and the supported export assignment.

@@ -1,5 +1,32 @@
 # Compatibility handoff
 
+## Terminal activation follow-up — 2026-09-22
+
+A terminal opened before Cauth's shell integration was installed still used the old
+Claude launch path and asked for login. Loading `cauth shell-init zsh` with `eval`
+in that terminal resolved it; the user confirmed a successful interactive response.
+Fresh-shell `claude` and `cc` requests were also verified on macOS. No replacement
+token, credential-file rewrite, or parent-shell environment export was required.
+
+Every token save (create/import/renew) and selection already calls the shared
+startup-integration installer. Keep that path idempotent. The follow-up makes its
+activation guidance explicit and adds a prominent post-TUI exit notice, with the
+command outside the box for copying. Normal `claude` and user shortcuts are the
+primary workflow; launching inside Cauth is optional.
+
+An existing terminal needs activation once, or the user can open a new terminal
+after successful Bash/Zsh setup. Subsequent switches are read on each new Claude
+launch without refreshing the terminal. Existing Claude processes keep their token.
+Never claim that Cauth can change its parent shell. Tests cover installer repair on
+save/renew/select, same-shell token switching, and instructions surviving TUI exit.
+
+The macOS Python 3.12 full suite passed 286 tests with two PowerShell tests skipped.
+After expanding the same-shell regression to cover Bash and Zsh, all 55 token-workflow
+tests passed. The installed Cauth launcher executes this checkout directly; no reinstall
+is needed for these Python/UI changes. Windows runtime acceptance remains separate.
+
+## Previous compatibility handoff
+
 Updated 2026-09-21. The public repository is available; the earlier public-preparation
 handoff is superseded. The current branch is `main`, based on public root commit
 `dd49714be50b4b7095210b3aaad28cde6d08fff8`.

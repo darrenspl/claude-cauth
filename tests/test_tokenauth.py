@@ -201,9 +201,13 @@ def test_bare_mode_is_refused_before_launch(args, monkeypatch):
     assert cauth.main(["run", *args]) == 1
 
 
-def test_real_launch_and_bash_function_use_selected_token(tmp_path, monkeypatch):
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_real_launch_and_shell_function_use_selected_token_without_refresh(tmp_path, monkeypatch, shell):
     if os.name != "posix":
         pytest.skip("POSIX executable fixture")
+    import shutil
+    if not shutil.which(shell):
+        pytest.skip(f"{shell} is not installed")
     tokenauth.save("alice", ALICE)
     tokenauth.save("bob", BOB)
     fake_bin = tmp_path / "bin"
@@ -221,15 +225,19 @@ def test_real_launch_and_bash_function_use_selected_token(tmp_path, monkeypatch)
     launcher.chmod(0o700)
     env = os.environ.copy()
     env.update(HOME=str(cauth.CONFIG_DIR.parent.parent), PATH=str(fake_bin) + os.pathsep + env["PATH"])
+    # Activate once, then switch A/B/A in the SAME shell. No restart or second eval.
+    script = f'eval "$(cauth shell-init {shell})"\n'
     for alias, token in (("alice", ALICE), ("bob", BOB), ("alice", ALICE)):
-        tokenauth.select(alias)
-        env["EXPECTED_FIXTURE_TOKEN"] = token
-        completed = subprocess.run(
-            ["bash", "--noprofile", "--norc", "-c", 'eval "$(cauth shell-init bash)"\nclaude -p "hello world"'],
-            env=env, capture_output=True, text=True,
-        )
-        assert completed.returncode == 0, completed.stderr
-        assert completed.stdout.strip() == "fixture authenticated"
+        script += (f'cauth switch {alias} >/dev/null\n'
+                   f'export EXPECTED_FIXTURE_TOKEN={token}\n'
+                   'claude -p "hello world" || exit $?\n')
+    flags = ["--noprofile", "--norc"] if shell == "bash" else ["-f"]
+    completed = subprocess.run(
+        [shell, *flags, "-c", script], env=env, capture_output=True, text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.splitlines() == ["fixture authenticated"] * 3
+    for token in (ALICE, BOB):
         assert token not in completed.stdout + completed.stderr
 
 
@@ -246,6 +254,9 @@ def test_default_ui_selects_tokens_and_renews_legacy_alias(live_login, size):
             await pilot.press("down", "enter")
             await pilot.pause()
             assert tokenauth.selected() == ("bob", BOB)
+            feedback = str(app.screen.query_one("#token-result").render())
+            assert 'eval "$(cauth shell-init bash)"' in feedback
+            assert "open a new terminal" in feedback
             await pilot.press("down", "l")
             await pilot.pause()
             assert app.return_value == tokenui.Request("create", "legacy")
@@ -335,7 +346,8 @@ def test_default_ui_setup_token_handoff_and_hidden_paste(tmp_path, paste_style):
     # Activation guidance must survive Textual clearing its alternate screen.
     after_ui = output.rsplit(b"\x1b[?1049l", 1)[-1]
     assert b'eval "$(cauth shell-init bash)"' in after_ui
-    assert b"cauth run" in after_ui
+    assert b"REFRESH THIS TERMINAL ONCE" in after_ui
+    assert b"Use claude or your usual shortcut" in after_ui
     assert b"paste was incomplete" not in output
     store = fake_home / ".config" / "claude-oauth" / "tokens.json"
     assert json.loads(store.read_text())["accounts"]["personal"]["token"] == ALICE
@@ -379,20 +391,40 @@ def test_token_operations_install_and_repair_shell_integration(monkeypatch, shel
     target.write_text(original)
     notice = tokenauth.save("alice", ALICE)
     assert "open a new terminal" in notice
+    assert f'eval "$(cauth shell-init {shell})"' in notice
+    assert "cannot refresh its parent terminal" in notice
     installed = target.read_bytes()
     backups = list(target.parent.glob(filename + ".cauth-backup-*"))
     assert len(backups) == 1
     assert backups[0].read_text() == original
     if os.name == "posix":
         assert backups[0].stat().st_mode & 0o777 == 0o600
-    tokenauth.save("bob", BOB)
+    notice = tokenauth.save("bob", BOB)
+    assert "open a new terminal" in notice
+    assert tokenauth.selected() == ("alice", ALICE)
     assert target.read_bytes() == installed
     assert list(target.parent.glob(filename + ".cauth-backup-*")) == backups
     target.write_text(original)
-    tokenauth.select("bob")
+    notice = tokenauth.save("alice", ALICE + "-renewed", "setup-token")
+    assert target.read_bytes() == installed
+    assert f'eval "$(cauth shell-init {shell})"' in notice
+    target.write_text(original)
+    notice = tokenauth.select("bob")
+    assert f'eval "$(cauth shell-init {shell})"' in notice
     assert target.read_bytes() == installed
     assert tokenauth.selected() == ("bob", BOB)
     assert b"sk-ant-" not in installed
+
+
+def test_quitting_ui_keeps_activation_instructions_in_terminal(monkeypatch, capsys):
+    monkeypatch.setattr(tokenui.TokenApp, "run", lambda self: None)
+    assert tokenui.run_tui() == 0
+    output = capsys.readouterr().out
+    assert "REFRESH THIS TERMINAL ONCE" in output
+    assert "Use claude or your usual shortcut" in output
+    assert 'eval "$(cauth shell-init bash)"' in output
+    assert "open a new terminal" in output
+    assert "no terminal refresh is needed" in output
 
 
 def test_shell_setup_failure_retains_token_and_reports_cli_retry(capsys):

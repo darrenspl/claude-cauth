@@ -60,6 +60,38 @@ selection alone does not claim the token is valid.
 
 ## Use your ordinary claude command
 
+**You do not need to launch Claude from inside Cauth.** Use Cauth to manage tokens,
+then launch `claude` or a shortcut such as `cc` from your terminal.
+
+### If Claude still asks you to log in after saving a token
+
+An already-open terminal may not have loaded the shell integration yet. Cauth can
+install the startup configuration, but a child process cannot refresh its parent shell.
+Exit Claude, then either **open a new terminal session** or run the command for your
+shell once in the existing terminal:
+
+```bash
+# Zsh
+eval "$(cauth shell-init zsh)"
+
+# Bash
+eval "$(cauth shell-init bash)"
+```
+
+Then run `claude` or `cc`. This activation is needed once per terminal that predates
+the integration. After it is loaded, adding, renewing, or selecting tokens does not
+require another terminal refresh: each new Claude launch reads the current selection.
+Already-running Claude sessions keep their original token. Saving a second token
+does not select it automatically; select it with Enter in Cauth to make it the main one.
+
+Every create/import/renew/select operation checks or repairs Bash/Zsh startup integration
+and displays activation guidance. Quitting the UI displays a prominent **REFRESH THIS
+TERMINAL ONCE** notice after the full-screen UI closes, with the activation command
+on its own line outside the box for easy copying. If shell setup reports failure, resolve it first;
+opening another terminal alone cannot repair a failed installation.
+
+### Integration details
+
 `cauth run -- <Claude arguments>` works immediately, including interactive sessions and
 `-p`. Creating, importing, renewing, or selecting a token automatically installs or
 repairs the Bash/Zsh shell function, including actions in the terminal UI. Existing

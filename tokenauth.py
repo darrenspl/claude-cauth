@@ -341,7 +341,7 @@ def login(alias, generate=True):
             raise cauth.CauthError(f"Token creation exited with status {code}. Stored token unchanged.")
     token = read_token()
     notice = save(alias, token, "setup-token" if generate else "imported")
-    print(f"Saved long-lived token for {alias}. Use cauth run to launch Claude.")
+    print(f"Saved long-lived token for {alias}.")
     print(notice)
 
 
@@ -393,12 +393,21 @@ def launch_instructions():
         "bash": 'eval "$(cauth shell-init bash)"',
         "zsh": 'eval "$(cauth shell-init zsh)"',
         "fish": "cauth shell-init fish | source",
+        "pwsh": "cauth shell-init powershell | Out-String | Invoke-Expression",
+        "powershell": "cauth shell-init powershell | Out-String | Invoke-Expression",
     }
     command = commands.get(shell)
-    notice = "Launch the selected account now with: cauth run"
+    notice = "Use claude or your usual shortcut (such as cc) outside Cauth."
     if command:
-        notice += ("\nIf this terminal has not loaded Cauth integration, run once:\n  "
-                   + command + "\nThen use claude or your usual shortcut.")
+        notice += ("\nExisting terminal still asks for login? Exit Claude, then run once:\n  "
+                   + command)
+    else:
+        notice += "\nLoad the function from cauth shell-init <shell> in your terminal."
+    if shell in ("bash", "zsh"):
+        notice += "\nOr open a new terminal session after successful shell setup."
+    notice += ("\nCauth cannot refresh its parent terminal. Once integration is loaded, "
+               "token switches apply on the next Claude launch; no terminal refresh is needed."
+               "\nAlready-running Claude sessions keep their original token.")
     return notice + "\nLong-lived tokens do not support Remote Control (--remote-control)."
 
 
@@ -414,8 +423,7 @@ def ensure_shell_integration():
         diagnostics.event("shell.install_failed", reason="startup_file_unavailable")
         return (f"Token saved/selected, but shell setup failed. Use cauth run now; "
                 f"run cauth install-shell {shell} to diagnose and retry.")
-    return ("Claude shell integration is ready. If this terminal has not loaded it yet, "
-            "open a new terminal. Shortcuts that call claude use the selected token too.")
+    return "Claude startup integration installed/checked.\n" + launch_instructions()
 
 
 def install_shell(shell):
