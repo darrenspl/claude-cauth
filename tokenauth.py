@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -40,6 +42,20 @@ lifetime; imported token age and server-side revocation cannot be inferred local
 
 def path():
     return cauth.CONFIG_DIR / "tokens.json"
+
+
+def launcher_dir():
+    """Holds Cauth's secret-free `claude` launcher, placed first on PATH."""
+    return cauth.CONFIG_DIR / "bin"
+
+
+# Caller-chosen authentication. A launch through the PATH launcher that already has one
+# of these (for example a child of a Cauth-launched session) keeps it untouched.
+AUTH_OVERRIDES = (
+    "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+)
 
 
 def load():
@@ -352,13 +368,55 @@ def run(args):
     if any(arg == "--bare" or arg.startswith("--bare=") for arg in args):
         diagnostics.event("claude.launch_rejected", reason="bare_mode")
         raise cauth.CauthError("Claude bare mode ignores OAuth tokens. Remove --bare.")
+    via_launcher = os.environ.pop("CAUTH_SHIM", None) == "1"
+    claude = cauth.claude_executable()
+    if not os.path.isabs(claude):
+        raise cauth.CauthError("Claude executable not found on PATH. Reinstall Claude Code.")
     if args[:1] == ["setup-token"]:
-        return subprocess.call(["claude", *args], env=environment())
-    _, token = selected()
+        return subprocess.call([claude, *args], env=environment())
+    if via_launcher:
+        # A plain `claude` launch that skipped the shell function. Supply the token when
+        # the caller brought no authentication of its own; never block the launch.
+        token = None
+        if not any(os.environ.get(key) for key in AUTH_OVERRIDES):
+            try:
+                token = selected()[1]
+            except cauth.CauthError as exc:
+                print(f"cauth: {exc} Starting Claude without a saved token.", file=sys.stderr)
+        diagnostics.event("claude.launcher", token_supplied=token is not None)
+        if token is None:
+            if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+                args = strip_remote_control(args)
+            return subprocess.call([claude, *args])
+    else:
+        _, token = selected()
+    args = strip_remote_control(args)
     diagnostics.event("claude.launch_details", argument_count=len(args), interactive=not bool(args))
-    code = subprocess.call(["claude", *args], env=environment(token))
+    code = subprocess.call([claude, *args], env=environment(token))
     diagnostics.event("claude.exit", returncode=code)
     return code
+
+
+def strip_remote_control(args):
+    """Setup-tokens cannot run Remote Control; Claude answers the flag with a /login
+    prompt. Drop it (and its optional name, parsed the way Claude parses it)."""
+    kept, skip_name, dropped = [], False, False
+    for arg in args:
+        if skip_name:
+            skip_name = False
+            if not arg.startswith("-"):
+                continue
+        if arg == "--remote-control":
+            skip_name = dropped = True
+            continue
+        if arg.startswith("--remote-control="):
+            dropped = True
+            continue
+        kept.append(arg)
+    if dropped:
+        print("cauth: removed --remote-control. Long-lived tokens cannot use Remote Control, "
+              "and Claude would ask you to log in.", file=sys.stderr)
+    return kept
 
 
 @diagnostics.traced("token.verify")
@@ -376,9 +434,15 @@ def verify():
 
 
 def shell_init(shell):
+    # Put the launcher first on PATH (moving it if already present), so scripts, tmux
+    # commands and `command claude` also get the token, not only typed commands.
+    front = (f"_cauth_bin={shlex.quote(str(launcher_dir()))}\n"
+             'PATH=":$PATH:"; PATH="${PATH//":$_cauth_bin:"/:}"; PATH="${PATH#:}"; PATH="${PATH%:}"\n'
+             'export PATH="$_cauth_bin${PATH:+:$PATH}"; unset _cauth_bin\n')
+    posix = front + 'unalias claude 2>/dev/null || true\nclaude() { command cauth run -- "$@"; }'
     scripts = {
-        "bash": 'unalias claude 2>/dev/null || true\nclaude() { command cauth run -- "$@"; }',
-        "zsh": 'unalias claude 2>/dev/null || true\nclaude() { command cauth run -- "$@"; }',
+        "bash": posix,
+        "zsh": posix,
         "fish": 'function claude; command cauth run -- $argv; end',
         "powershell": 'function global:claude { & cauth run -- @args }',
     }
@@ -411,6 +475,50 @@ def launch_instructions():
     return notice + "\nLong-lived tokens do not support Remote Control (--remote-control)."
 
 
+def install_launcher():
+    """Write the secret-free PATH launcher. Rewritten only when it differs."""
+    found = shutil.which("cauth", path=os.pathsep.join(
+        entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+        if entry and os.path.realpath(entry) != os.path.realpath(launcher_dir())))
+    command = (shlex.quote(found) if found else
+               shlex.quote(sys.executable) + " " + shlex.quote(str(Path(cauth.__file__).resolve())))
+    body = ("#!/bin/sh\n"
+            "# Generated by Cauth. Contains no token. Sends plain `claude` launches through\n"
+            "# Cauth so the selected long-lived token is supplied. Cauth repairs this file.\n"
+            f'CAUTH_SHIM=1 exec {command} run -- "$@"\n')
+    target = launcher_dir() / "claude"
+    if target.exists() and not target.is_symlink():
+        try:
+            if target.read_text() == body and os.access(target, os.X_OK):
+                return target
+        except (OSError, UnicodeError):
+            pass
+    launcher_dir().mkdir(parents=True, exist_ok=True, mode=cauth.DIR_MODE)
+    fd, temporary = cauth.tempfile.mkstemp(prefix=".claude-", dir=launcher_dir())
+    temp = Path(temporary)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(body)
+        os.chmod(temp, 0o700)
+        os.replace(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
+    return target
+
+
+def heal():
+    """Quietly repair the launcher and shell block on every Cauth use. Only once a token
+    is selected, so browser-login-only users keep a plain `claude`. Never raises."""
+    try:
+        if not load()["active"]:
+            return
+        shell = Path(os.environ.get("SHELL", "")).name
+        if shell in ("bash", "zsh"):
+            install_shell(shell)
+    except (OSError, UnicodeError, cauth.CauthError):
+        diagnostics.event("shell.heal_failed")
+
+
 def ensure_shell_integration():
     """Repair persistent routing after a committed token operation, without losing it."""
     shell = Path(os.environ.get("SHELL", "")).name
@@ -429,6 +537,7 @@ def ensure_shell_integration():
 def install_shell(shell):
     if shell not in ("bash", "zsh"):
         raise cauth.CauthError("Automatic installation supports bash/zsh. Use shell-init for fish/PowerShell.")
+    install_launcher()
     destination = Path.home() / (".bashrc" if shell == "bash" else ".zshrc")
     if destination.is_symlink():
         destination = destination.resolve(strict=True)
@@ -465,9 +574,12 @@ def install_shell(shell):
 
 def main(argv):
     if not argv:
+        heal()
         from tokenui import run_tui
         return run_tui()
     cmd, *args = argv
+    if cmd != "shell-init":
+        heal()
     if cmd == "logs" and args in ([], ["--path"]):
         print(str(diagnostics.path()) if args else diagnostics.read_recent() or "No diagnostic events recorded yet.")
         return 0

@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Stop random login prompts from plain `claude`/`cc` launches that skipped the shell
+  function (old terminals, scripts, tmux commands, `command claude`). The shell block now
+  puts a secret-free `claude` launcher first on `PATH` that supplies the selected token,
+  while keeping any authentication the caller already set.
+- Self-repair: every Cauth command reinstalls a missing or outdated launcher and shell
+  block once a token is selected.
+- Remove `--remote-control` from token launches with a notice. Setup-tokens cannot use
+  Remote Control and Claude answered it with a `/login` prompt.
+
 - Make normal `claude`/`cc` launches the primary post-setup guidance. Every successful
   token save/renew/select explains how to activate an existing terminal once, and that
   later token switches only require a new Claude launch. Document the stale-terminal

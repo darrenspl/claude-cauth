@@ -101,9 +101,20 @@ For an already-open Bash terminal, run `eval "$(cauth shell-init bash)"` once be
 your usual shortcut. Saving a token cannot update the parent terminal's functions.
 Cauth prints these activation instructions after the UI closes so they remain visible.
 User-defined aliases and functions that call `claude` follow the same selection;
-Cauth does not create, rename, or edit those shortcuts. Shortcuts that call Claude's
-executable by absolute path or use `command claude` bypass this shell integration.
-Setup-tokens do not support `--remote-control`.
+Cauth does not create, rename, or edit those shortcuts. The same shell block also puts a
+secret-free `claude` launcher (`~/.config/claude-oauth/bin/claude`) first on `PATH`, so
+scripts, tmux command strings and `command claude` get the token too. A launch through
+that launcher keeps any authentication the caller already set, such as the token a
+running Claude session hands its child processes. Only a launch by absolute path to
+Claude's own executable bypasses Cauth.
+
+Every Cauth command repairs the launcher and the shell block when they are missing or
+out of date, once a token is selected. Terminals opened before the shell block existed
+cannot be repaired from outside; run `exec bash` in them once, or close them.
+
+Setup-tokens do not support Remote Control; Claude answers `--remote-control` with a
+`/login` prompt. Cauth removes that flag (and its optional name) from token launches
+and prints a one-line notice.
 Other shells receive manual setup instructions. If setup fails, the token is retained
 and Cauth displays a retry instruction; `cauth run` remains available.
 
@@ -122,14 +133,15 @@ PowerShell: `cauth shell-init powershell | Out-String | Invoke-Expression`.
 Add that line to `$PROFILE` to retain it in new sessions.
 Fish: `cauth shell-init fish | source`; add that line to `config.fish` for persistence.
 The function contains no token. It loads the selected token afresh on each launch.
-Remove the marked Cauth block from your shell startup file to uninstall the integration.
+To uninstall the integration, remove your saved tokens first (or run `cauth reset --yes`),
+then remove the marked Cauth block. While a token is selected, Cauth restores the block.
 
 Cauth supplies `CLAUDE_CODE_OAUTH_TOKEN` only to the Claude child process. It removes
 inherited API-key, bearer-token, provider, profile, and custom-endpoint overrides from
 that child environment. It does not export secrets to the parent shell or rewrite live
 browser credential files. Already-running Claude processes retain their original token;
-start a new session after changing accounts. Direct launches outside the shell function
-or `cauth run` do not use Cauth's selection. `--bare` is rejected because Claude ignores
+start a new session after changing accounts. Launches by absolute path to Claude's own
+executable do not use Cauth's selection. `--bare` is rejected because Claude ignores
 the OAuth environment variable in that mode. Setup-tokens do not support Remote Control.
 
 ## Existing browser profiles

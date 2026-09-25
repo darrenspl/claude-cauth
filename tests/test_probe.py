@@ -25,7 +25,8 @@ def test_claude_probe_is_a_real_bounded_print_request(monkeypatch):
     assert result.ok
     assert result.returncode == 0
     assert result.output == "CAUTH_OK"
-    assert seen["argv"][0:2] == ["claude", "-p"]
+    assert cauth.Path(seen["argv"][0]).stem.lower() == "claude"
+    assert seen["argv"][1] == "-p"
     assert "--model" in seen["argv"]
     assert seen["argv"][seen["argv"].index("--model") + 1] == "haiku"
     assert "--tools" in seen["argv"]

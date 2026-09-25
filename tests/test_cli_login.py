@@ -80,8 +80,8 @@ def test_run_claude_login_forwards_code_and_prints_only_masked_preview(
     )
 
     assert cauth.run_claude_login("alice@example.test") == 23
-    assert seen["argv"] == [
-        "claude",
+    assert cauth.Path(seen["argv"][0]).stem.lower() == "claude"
+    assert seen["argv"][1:] == [
         "auth",
         "login",
         "--email",

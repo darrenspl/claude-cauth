@@ -119,8 +119,9 @@ def test_child_receives_selected_token_without_mutating_parent_or_live_files(liv
     before = cauth.snapshot_files([cauth.LIVE_CREDENTIALS, cauth.LIVE_CLAUDE_JSON])
     for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_VERTEX"):
         monkeypatch.setenv(name, "fixture-override")
+    monkeypatch.setattr(cauth, "claude_executable", lambda: "/fixture/bin/claude")
     def child(argv, env):
-        assert argv == ["claude", "-p", "hello world"]
+        assert argv == ["/fixture/bin/claude", "-p", "hello world"]
         assert env["CLAUDE_CODE_OAUTH_TOKEN"] == BOB
         assert "ANTHROPIC_API_KEY" not in env
         assert "ANTHROPIC_AUTH_TOKEN" not in env
@@ -239,6 +240,59 @@ def test_real_launch_and_shell_function_use_selected_token_without_refresh(tmp_p
     assert completed.stdout.splitlines() == ["fixture authenticated"] * 3
     for token in (ALICE, BOB):
         assert token not in completed.stdout + completed.stderr
+
+
+def test_plain_path_launch_gets_token_and_launcher_self_repairs(tmp_path, monkeypatch):
+    if os.name != "posix":
+        pytest.skip("POSIX executable fixture")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_claude = fake_bin / "claude"
+    fake_claude.write_text(
+        f"#!{sys.executable}\nimport os, sys\n"
+        "assert os.environ['CLAUDE_CODE_OAUTH_TOKEN'] == os.environ['EXPECTED_FIXTURE_TOKEN']\n"
+        "assert sys.argv[1:] == ['-p', 'hi'], sys.argv\n"
+        "assert 'CAUTH_SHIM' not in os.environ\n"
+        "print('fixture authenticated')\n"
+    )
+    fake_claude.chmod(0o700)
+    (fake_bin / "cauth").write_text(f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {str(Path(cauth.__file__).parent)!r})\nimport cauth\nraise SystemExit(cauth.main())\n")
+    (fake_bin / "cauth").chmod(0o700)
+    monkeypatch.setenv("PATH", str(fake_bin) + os.pathsep + os.environ["PATH"])
+    tokenauth.save("alice", ALICE)
+    launcher = tokenauth.launcher_dir() / "claude"
+    assert ALICE not in launcher.read_text()
+    env = dict(os.environ, HOME=str(cauth.CONFIG_DIR.parent.parent))
+    env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+
+    def bash(script, **extra):
+        return subprocess.run(["bash", "--noprofile", "--norc", "-c", script],
+                              env={**env, **extra}, capture_output=True, text=True)
+
+    # The shell block puts the launcher first on PATH; the function is not needed after.
+    found = bash('eval "$(cauth shell-init bash)"; unset -f claude; type -P claude')
+    assert found.stdout.strip() == str(launcher)
+    # A plain launch with no shell function (script, tmux command) still gets the token,
+    # and --remote-control, which would force a /login prompt, is removed with its name.
+    plain = bash(f'PATH={launcher.parent}:$PATH; claude --remote-control box -p hi',
+                 EXPECTED_FIXTURE_TOKEN=ALICE)
+    assert plain.returncode == 0, plain.stderr
+    assert plain.stdout.strip() == "fixture authenticated"
+    assert "removed --remote-control" in plain.stderr
+    # Caller-supplied authentication (a child of a running session) is left untouched.
+    inherited = "sk-ant-oat01-inherited"
+    child = bash(f'PATH={launcher.parent}:$PATH; claude -p hi',
+                 CLAUDE_CODE_OAUTH_TOKEN=inherited, EXPECTED_FIXTURE_TOKEN=inherited)
+    assert child.returncode == 0, child.stderr
+    for output in (found, plain, child):
+        assert ALICE not in output.stdout + output.stderr
+    # Any Cauth command repairs a deleted launcher and a stripped shell block.
+    launcher.unlink()
+    bashrc = Path(env["HOME"]) / ".bashrc"
+    bashrc.write_text("# user settings\n")
+    assert bash("cauth status").returncode == 0
+    assert launcher.exists() and "Claude Cauth OAuth" in bashrc.read_text()
+    assert bashrc.read_text().startswith("# user settings\n")
 
 
 @pytest.mark.parametrize("size", [(100, 30), (60, 20)])

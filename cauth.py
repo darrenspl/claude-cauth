@@ -1090,6 +1090,17 @@ def _safe_probe_output(stdout: str | bytes | None, stderr: str | bytes | None) -
     return output
 
 
+def claude_executable() -> str:
+    """The official Claude executable. Skips Cauth's own PATH launcher so a launch
+    through that launcher can never call itself again."""
+    launcher_dir = os.path.normcase(os.path.realpath(CONFIG_DIR / "bin"))
+    search = os.pathsep.join(
+        entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+        if entry and os.path.normcase(os.path.realpath(entry)) != launcher_dir
+    )
+    return shutil.which("claude", path=search) or "claude"
+
+
 def run_claude_probe(timeout_seconds: int = 90, *, oauth_token: str | None = None) -> ClaudeProbeResult:
     """Make Claude prove the installed OAuth profile works with a real print request.
 
@@ -1099,7 +1110,7 @@ def run_claude_probe(timeout_seconds: int = 90, *, oauth_token: str | None = Non
     output, and never lets child output take ownership of Textual's terminal.
     """
     argv = [
-        "claude",
+        claude_executable(),
         "-p",
         _PROBE_PROMPT,
         "--model",
@@ -1778,7 +1789,7 @@ def run_claude_login(email: str | None = None, idle_seconds: float = 180) -> int
     reads the paste from the terminal with echo disabled, prints only a masked preview, and
     forwards the complete value to Claude in memory.
     """
-    argv = ["claude", "auth", "login"]
+    argv = [claude_executable(), "auth", "login"]
     if email:
         argv.extend(["--email", email])
     env = os.environ.copy()
@@ -1985,7 +1996,7 @@ def doctor() -> int:
     """Nonmutating installation checks; no credential reads or store creation."""
     checks = [
         ("Python 3.9+", sys.version_info >= (3, 9)),
-        ("Claude executable on PATH", shutil.which("claude") is not None),
+        ("Claude executable on PATH", os.path.isabs(claude_executable())),
     ]
     try:
         import tui
